@@ -1,9 +1,318 @@
-<script setup></script>
-
 <template>
-  <h1>You did it!</h1>
-  <p>
-    Visit <a href="https://vuejs.org/" target="_blank" rel="noopener">vuejs.org</a> to read the
-    documentation
-  </p>
+  <div class="simulation-container">
+    <div class="controls">
+      <h3>Муравейник с едой и феромонами</h3>
+      <p>Муравьев: <strong>{{ antCount }}</strong> | Собранная еда: <strong class="food-score">{{ score }}</strong></p>
+      <button @click="resetSimulation">Перегенерировать мир</button>
+    </div>
+    <div ref="canvasContainer" class="canvas-holder"></div>
+  </div>
 </template>
+
+<script setup>
+import { ref, onMounted, onBeforeUnmount } from 'vue';
+import p5 from 'p5';
+
+const canvasContainer = ref(null);
+const antCount = ref(150); 
+const score = ref(0);
+let p5Instance = null;
+
+// Настройки сетки
+const COLS = 50;
+const ROWS = 40;
+const CELL_SIZE = 12;
+const WIDTH = COLS * CELL_SIZE;
+const HEIGHT = ROWS * CELL_SIZE;
+
+let grid = [];
+let homePheromone = [];
+let foodPheromone = [];
+let foods = [];
+
+// Класс Еды
+class Food {
+  constructor(x, y, amount = 100) {
+    this.x = x;
+    this.y = y;
+    this.amount = amount;
+    this.radius = 15;
+  }
+}
+
+// Класс Муравья
+class Ant {
+  constructor(p) {
+    this.p = p;
+    this.homeX = WIDTH / 2;
+    this.homeY = HEIGHT / 2;
+    this.x = this.homeX;
+    this.y = this.homeY;
+    
+    let angle = p.random(p.TWO_PI);
+    this.vx = p.cos(angle) * 1.5;
+    this.vy = p.sin(angle) * 1.5;
+    
+    this.hasFood = false;
+    this.searchRadius = 25; // Радиус обзора для поиска еды/дома/феромонов
+  }
+
+  update() {
+    let cellX = Math.floor(this.x / CELL_SIZE);   //определяем индексы клетки, в которой находится муравей
+    let cellY = Math.floor(this.y / CELL_SIZE);
+
+    // 1. Оставляем феромоны на текущей позиции (если внутри тоннеля/на поверхности)
+    if (cellX >= 0 && cellX < COLS && cellY >= 0 && cellY < ROWS) {
+      if (this.hasFood) {
+        foodPheromone[cellY][cellX] = 255; // Сильный след еды
+      } else {
+        homePheromone[cellY][cellX] = 255; // Сильный след дома
+      }
+    }
+
+    // 2. Взаимодействие с едой и домом
+    if (!this.hasFood) {
+      // Ищем еду поблизости
+      for (let i = foods.length - 1; i >= 0; i--) {
+        let f = foods[i];
+        if (this.p.dist(this.x, this.y, f.x, f.y) < f.radius) {
+          this.hasFood = true;
+          f.amount -= 1;
+          if (f.amount <= 0) foods.splice(i, 1); // Съели источник
+          this.vx *= -1; // Разворот домой
+          this.vy *= -1;
+          break;
+        }
+      }
+    } else {
+      // Несет еду домой
+      if (this.p.dist(this.x, this.y, this.homeX, this.homeY) < 20) {
+        this.hasFood = false;
+        score.value++; // Очко муравейнику
+        this.vx *= -1; // Разворот на поиски
+        this.vy *= -1;
+      }
+    }
+
+    // 3. Выбор направления на основе феромонов (простой алгоритм чутья)
+    if (this.p.random(1) < 0.5) { // 30% шанса скорректировать курс по запаху
+      let targetGrid = this.hasFood ? homePheromone : foodPheromone;
+      let bestX = this.vx;
+      let bestY = this.vy;
+      let maxPheromone = 0;
+
+      // Проверяем 5 случайных точек впереди себя
+      for (let i = 0; i < 5; i++) {
+        let sampleAngle = this.p.atan2(this.vy, this.vx) + this.p.random(-0.8, 0.8);
+        let checkX = this.x + this.p.cos(sampleAngle) * this.searchRadius;
+        let checkY = this.y + this.p.sin(sampleAngle) * this.searchRadius;
+        
+        let cx = Math.floor(checkX / CELL_SIZE);
+        let cy = Math.floor(checkY / CELL_SIZE);
+
+        if (cx >= 0 && cx < COLS && cy >= 0 && cy < ROWS && grid[cy][cx] === 1) {
+          if (targetGrid[cy][cx] > maxPheromone) {
+            maxPheromone = targetGrid[cy][cx];
+            bestX = this.p.cos(sampleAngle) * 1.5;
+            bestY = this.p.sin(sampleAngle) * 1.5;
+          }
+        }
+      }
+      if (maxPheromone > 10) { // Если запах отчетливый — идем туда
+        this.vx = this.p.lerp(this.vx, bestX, 0.8);
+        this.vy = this.p.lerp(this.vy, bestY, 0.8);
+      }
+    }
+
+    // Добавляем немного хаотичного шума в движение
+    this.vx += this.p.random(-0.2, 0.2);
+    this.vy += this.p.random(-0.2, 0.2);
+    
+    // Ограничение скорости
+    let speed = this.p.dist(0, 0, this.vx, this.vy);
+    if (speed > 2) { this.vx = (this.vx / speed) * 2; this.vy = (this.vy / speed) * 2; }
+    if (speed < 0.5) { this.vx = (this.vx / speed) * 0.5; this.vy = (this.vy / speed) * 0.5; }
+
+    // 4. Физика движения и отскоков от стен
+    let nextX = this.x + this.vx;
+    let nextY = this.y + this.vy;
+    let nCellX = Math.floor(nextX / CELL_SIZE);
+    let nCellY = Math.floor(nextY / CELL_SIZE);
+
+    if (nCellX < 0 || nCellX >= COLS || nCellY < 0 || nCellY >= ROWS || grid[nCellY][nCellX] === 0) {
+      let angle = this.p.atan2(this.vy, this.vx) + this.p.PI + this.p.random(-1, 1);
+      this.vx = this.p.cos(angle) * 1.5;
+      this.vy = this.p.sin(angle) * 1.5;
+    } else {
+      this.x = nextX;
+      this.y = nextY;
+    }
+  }
+
+  display() {
+    this.p.noStroke();
+    if (this.hasFood) {
+      this.p.fill(0, 200, 0); // Зеленый, если несет еду
+    } else {
+      this.p.fill(40, 20, 10); // Обычный коричневый
+    }
+    this.p.ellipse(this.x, this.y, 4, 4);
+  }
+}
+
+// Генератор карты
+const generateMap = () => {
+  grid = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+  homePheromone = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+  foodPheromone = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+  foods = [];
+  score.value = 0;
+
+  // 1. Поверхность (верхняя треть карты полностью открыта для вольного хождения)
+  for (let y = 0; y < Math.floor(ROWS * 0.3); y++) {
+    for (let x = 0; x < COLS; x++) {
+      grid[y][x] = 1;
+    }
+  }
+
+  // 2. Стартовая камера в центре под землей
+  const centerX = Math.floor(COLS / 2);
+  const centerY = Math.floor(ROWS * 0.6);
+  for (let y = centerY - 2; y <= centerY + 2; y++) {
+    for (let x = centerX - 3; x <= centerX + 3; x++) {
+      grid[y][x] = 1;
+    }
+  }
+
+  // 3. Копаем тоннели, включая те, что ведут на поверхность
+  for (let i = 0; i < 6; i++) {
+    let cx = centerX;
+    let cy = centerY;
+    for (let steps = 0; steps < 200; steps++) {
+      let dir = Math.floor(Math.random() * 4);  //случайное число от 0 до 3
+      if (dir === 0) cx++;
+      if (dir === 1) cx--;
+      if (dir === 2) cy++;
+      if (dir === 3) cy--;
+
+      cx = Math.max(1, Math.min(COLS - 2, cx));   //ограничения, чтоб не ушли за карту
+      cy = Math.max(1, Math.min(ROWS - 2, cy));
+      grid[cy][cx] = 1;
+    }
+  }
+
+  // 4. Генерируем 3 кучки еды на поверхности
+  foods.push(new Food(WIDTH * 0.2, HEIGHT * 0.15, 150));
+  foods.push(new Food(WIDTH * 0.5, HEIGHT * 0.10, 150));
+  foods.push(new Food(WIDTH * 0.8, HEIGHT * 0.15, 150));
+};
+
+const initP5 = () => {
+  const sketch = (p) => {
+    let ants = [];
+
+    p.setup = () => {
+      p.createCanvas(WIDTH, HEIGHT).parent(canvasContainer.value);
+      generateMap();
+      for (let i = 0; i < antCount.value; i++) {
+        ants.push(new Ant(p));
+      }
+    };
+
+    p.draw = () => {
+      p.background(139, 69, 19); // Цвет земли
+
+      // Отрисовка тоннелей и неба/поверхности
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          if (grid[y][x] === 1) {
+            // Если это верхняя часть — красим как небо/траву, ниже — как пещеру
+            if (y < Math.floor(ROWS * 0.3)) {
+              p.fill(135, 206, 235); // Небо
+            } else {
+              p.fill(222, 184, 135); // Пещера
+            }
+            p.noStroke();
+            p.rect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+
+            // Визуализация феромонов (подсветка синим и красным)
+            if (homePheromone[y][x] > 0) {
+              p.fill(0, 0, 255, homePheromone[y][x] * 0.15);
+              p.rect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+              homePheromone[y][x] -= 0.9; // Испарение домашнего феромона
+            }
+            if (foodPheromone[y][x] > 0) {
+              p.fill(255, 0, 0, foodPheromone[y][x] * 0.25);
+              p.rect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+              foodPheromone[y][x] -= 0.9; // Испарение пищевого феромона
+            }
+          }
+        }
+      }
+
+      // Отрисовка центрального гнезда (Муравейника)
+      p.fill(100, 50, 20);
+      p.ellipse(WIDTH / 2, HEIGHT * 0.6, 30, 20);
+
+      // Отрисовка еды
+      for (let f of foods) {
+        p.fill(34, 139, 34); // Зеленые маркеры ресурсов
+        p.ellipse(f.x, f.y, f.radius);
+      }
+
+      // Обновление и отрисовка муравьев
+      for (let ant of ants) {
+        ant.update();
+        ant.display();
+      }
+    };
+  };
+
+  p5Instance = new p5(sketch);
+};
+
+const resetSimulation = () => {
+  if (p5Instance) {
+    p5Instance.remove();
+    initP5();
+  }
+};
+
+onMounted(() => initP5());
+onBeforeUnmount(() => { if (p5Instance) p5Instance.remove(); });
+</script>
+
+<style scoped>
+.simulation-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: sans-serif;
+  color: #333;
+}
+.controls {
+  margin-bottom: 15px;
+  text-align: center;
+}
+.food-score {
+  color: #16a34a;
+  font-size: 1.1em;
+}
+button {
+  padding: 8px 16px;
+  background-color: #059669;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+button:hover {
+  background-color: #047857;
+}
+.canvas-holder {
+  border: 4px solid #451a03;
+  border-radius: 8px;
+  overflow: hidden;
+}
+</style>
