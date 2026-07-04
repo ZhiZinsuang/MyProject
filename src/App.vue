@@ -45,7 +45,7 @@ class Ant {
   constructor(p) {
     this.p = p;
     this.homeX = WIDTH / 2;
-    this.homeY = HEIGHT / 2;
+    this.homeY = HEIGHT * 0.6;
     this.x = this.homeX;
     this.y = this.homeY;
     
@@ -86,7 +86,7 @@ class Ant {
       }
     } else {
       // Несет еду домой
-      if (this.p.dist(this.x, this.y, this.homeX, this.homeY) < 20) {
+      if (this.p.dist(this.x, this.y, this.homeX, this.homeY) < 50) {
         this.hasFood = false;
         score.value++; // Очко муравейнику
         this.vx *= -1; // Разворот на поиски
@@ -95,7 +95,7 @@ class Ant {
     }
 
     // 3. Выбор направления на основе феромонов (простой алгоритм чутья)
-    if (this.p.random(1) < 0.5) { // 30% шанса скорректировать курс по запаху
+    if (this.p.random(1) < 0.5) { // 50% шанс скорректировать курс по запаху
       let targetGrid = this.hasFood ? homePheromone : foodPheromone;
       let bestX = this.vx;
       let bestY = this.vy;
@@ -130,8 +130,14 @@ class Ant {
     
     // Ограничение скорости
     let speed = this.p.dist(0, 0, this.vx, this.vy);
-    if (speed > 2) { this.vx = (this.vx / speed) * 2; this.vy = (this.vy / speed) * 2; }
-    if (speed < 0.5) { this.vx = (this.vx / speed) * 0.5; this.vy = (this.vy / speed) * 0.5; }
+    if (speed > 2) { 
+      this.vx = (this.vx / speed) * 2; 
+      this.vy = (this.vy / speed) * 2; 
+    }
+    if (speed < 0.5) { 
+      this.vx = (this.vx / speed) * 0.5; 
+      this.vy = (this.vy / speed) * 0.5; 
+    }
 
     // 4. Физика движения и отскоков от стен
     let nextX = this.x + this.vx;
@@ -185,19 +191,55 @@ const generateMap = () => {
   }
 
   // 3. Копаем тоннели, включая те, что ведут на поверхность
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 5; i++) {
     let cx = centerX;
     let cy = centerY;
+    let ban = null;
     for (let steps = 0; steps < 200; steps++) {
       let dir = Math.floor(Math.random() * 4);  //случайное число от 0 до 3
-      if (dir === 0) cx++;
-      if (dir === 1) cx--;
-      if (dir === 2) cy++;
-      if (dir === 3) cy--;
+      if (dir === 0 && i != 3) cx++;
+      if (dir === 1 && i != 2) cx--;
+      if (dir === 2 && i >= 2) cy++;
+      if (dir === 3 && i != 4) cy--;
 
-      cx = Math.max(1, Math.min(COLS - 2, cx));   //ограничения, чтоб не ушли за карту
+      cx = Math.max(2, Math.min(COLS - 2, cx));   //ограничения, чтоб не ушли за карту
       cy = Math.max(1, Math.min(ROWS - 2, cy));
       grid[cy][cx] = 1;
+      grid[cy - 1][cx] = 1;
+      grid[cy][cx - 1] = 1;
+
+      if (i < 2 && cy === 1) break;   //выход из цикла, если 2 первых копателя достигли верхней границы
+      else if (i < 2) {
+        grid[cy][cx + 1] = 1;
+        grid[cy - 1][cx] = 1;
+      }
+
+      if (i === 2 && (cx === Math.floor(COLS * 0.8) || cy === Math.floor(ROWS * 0.4))){
+        for (let j = 0; j < 7; j++) {
+          grid[cy][cx + j] = 1;
+          grid[cy - 1][cx + j] = 1;
+          grid[cy - 2][cx + j] = 1;
+        }
+        break;
+      }
+
+      if (i === 3 && (cx === Math.floor(COLS * 0.2) || cy === Math.floor(ROWS * 0.4))){
+        for (let j = 0; j < 7; j++) {
+          grid[cy][cx - j] = 1;
+          grid[cy - 1][cx - j] = 1;
+          grid[cy - 2][cx - j] = 1;
+        }
+        break;
+      }
+
+      if (i === 4 && cy === ROWS - 2){
+        for (let j = 0; j < 9; j++) {
+          grid[cy][cx - j] = 1;
+          grid[cy - 1][cx - j] = 1;
+          grid[cy - 2][cx - j] = 1;
+        }
+        break;
+      }
     }
   }
 
@@ -232,7 +274,7 @@ const initP5 = () => {
             } else {
               p.fill(222, 184, 135); // Пещера
             }
-            p.noStroke();
+            p.noStroke();   //без контура
             p.rect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
 
             // Визуализация феромонов (подсветка синим и красным)
@@ -251,8 +293,8 @@ const initP5 = () => {
       }
 
       // Отрисовка центрального гнезда (Муравейника)
-      p.fill(100, 50, 20);
-      p.ellipse(WIDTH / 2, HEIGHT * 0.6, 30, 20);
+      //p.fill(100, 50, 20);
+      //p.ellipse(WIDTH / 2, HEIGHT * 0.6, 30, 20);
 
       // Отрисовка еды
       for (let f of foods) {
@@ -286,7 +328,7 @@ onBeforeUnmount(() => { if (p5Instance) p5Instance.remove(); });
 .simulation-container {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: left;
   font-family: sans-serif;
   color: #333;
 }
