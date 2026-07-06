@@ -4,6 +4,25 @@
       <h3>Муравейник с едой и феромонами</h3>
       <p>Муравьев: <strong>{{ antCount }}</strong> | Собранная еда: <strong class="food-score">{{ score }}</strong></p>
       <button @click="resetSimulation">Перегенерировать мир</button>
+      
+      <label for="size-slider">Размер круга: {{ circleSize }}px</label>
+    <input 
+      id="size-slider"
+      type="range" 
+      min="10" 
+      max="200" 
+      v-model.number="circleSize" 
+    />
+
+    <label for="antChange">Размер круга: {{ antCount }}px</label>
+    <input 
+      id="antChange"
+      type="range" 
+      min="10" 
+      max="200" 
+      v-model.number="antCount" 
+    />
+
     </div>
     <div ref="canvasContainer" class="canvas-holder"></div>
   </div>
@@ -17,6 +36,8 @@ const canvasContainer = ref(null);
 const antCount = ref(150); 
 const score = ref(0);
 let p5Instance = null;
+
+const circleSize = ref(100);
 
 // Настройки сетки
 const COLS = 50;
@@ -61,7 +82,7 @@ class Ant {
     let cellX = Math.floor(this.x / CELL_SIZE);   //определяем индексы клетки, в которой находится муравей
     let cellY = Math.floor(this.y / CELL_SIZE);
 
-    // 1. Оставляем феромоны на текущей позиции (если внутри тоннеля/на поверхности)
+    //  Оставляем феромоны на текущей позиции (если внутри тоннеля/на поверхности)
     if (cellX >= 0 && cellX < COLS && cellY >= 0 && cellY < ROWS) {
       if (this.hasFood) {
         foodPheromone[cellY][cellX] = 255; // Сильный след еды
@@ -70,7 +91,7 @@ class Ant {
       }
     }
 
-    // 2. Взаимодействие с едой и домом
+    //  Взаимодействие с едой и домом
     if (!this.hasFood) {
       // Ищем еду поблизости
       for (let i = foods.length - 1; i >= 0; i--) {
@@ -86,7 +107,7 @@ class Ant {
       }
     } else {
       // Несет еду домой
-      if (this.p.dist(this.x, this.y, this.homeX, this.homeY) < 50) {
+      if (this.p.dist(this.x, this.y, this.homeX, this.homeY) < 60) {
         this.hasFood = false;
         score.value++; // Очко муравейнику
         this.vx *= -1; // Разворот на поиски
@@ -94,7 +115,7 @@ class Ant {
       }
     }
 
-    // 3. Выбор направления на основе феромонов (простой алгоритм чутья)
+    //  Выбор направления на основе феромонов 
     if (this.p.random(1) < 0.5) { // 50% шанс скорректировать курс по запаху
       let targetGrid = this.hasFood ? homePheromone : foodPheromone;
       let bestX = this.vx;
@@ -139,7 +160,7 @@ class Ant {
       this.vy = (this.vy / speed) * 0.5; 
     }
 
-    // 4. Физика движения и отскоков от стен
+    // Физика движения и отскоков от стен
     let nextX = this.x + this.vx;
     let nextY = this.y + this.vy;
     let nCellX = Math.floor(nextX / CELL_SIZE);
@@ -174,14 +195,14 @@ const generateMap = () => {
   foods = [];
   score.value = 0;
 
-  // 1. Поверхность (верхняя треть карты полностью открыта для вольного хождения)
+  // Поверхность (верхняя треть карты полностью открыта для вольного хождения)
   for (let y = 0; y < Math.floor(ROWS * 0.3); y++) {
     for (let x = 0; x < COLS; x++) {
       grid[y][x] = 1;
     }
   }
 
-  // 2. Стартовая камера в центре под землей
+  // Стартовая камера в центре под землей
   const centerX = Math.floor(COLS / 2);
   const centerY = Math.floor(ROWS * 0.6);
   for (let y = centerY - 2; y <= centerY + 2; y++) {
@@ -190,7 +211,7 @@ const generateMap = () => {
     }
   }
 
-  // 3. Копаем тоннели, включая те, что ведут на поверхность
+  // Копаем тоннели, включая те, что ведут на поверхность
   for (let i = 0; i < 5; i++) {
     let cx = centerX;
     let cy = centerY;
@@ -214,6 +235,7 @@ const generateMap = () => {
         grid[cy - 1][cx] = 1;
       }
 
+      // копаем камеру справа 
       if (i === 2 && (cx === Math.floor(COLS * 0.8) || cy === Math.floor(ROWS * 0.4))){
         for (let j = 0; j < 7; j++) {
           grid[cy][cx + j] = 1;
@@ -223,6 +245,7 @@ const generateMap = () => {
         break;
       }
 
+      // копаем камеру слева
       if (i === 3 && (cx === Math.floor(COLS * 0.2) || cy === Math.floor(ROWS * 0.4))){
         for (let j = 0; j < 7; j++) {
           grid[cy][cx - j] = 1;
@@ -232,6 +255,7 @@ const generateMap = () => {
         break;
       }
 
+      // копаем нижнюю камеру
       if (i === 4 && cy === ROWS - 2){
         for (let j = 0; j < 9; j++) {
           grid[cy][cx - j] = 1;
@@ -243,7 +267,7 @@ const generateMap = () => {
     }
   }
 
-  // 4. Генерируем 3 кучки еды на поверхности
+  //  Генерируем 3 кучки еды на поверхности
   foods.push(new Food(WIDTH * 0.2, HEIGHT * 0.15, 150));
   foods.push(new Food(WIDTH * 0.5, HEIGHT * 0.10, 150));
   foods.push(new Food(WIDTH * 0.8, HEIGHT * 0.15, 150));
@@ -264,13 +288,13 @@ const initP5 = () => {
     p.draw = () => {
       p.background(139, 69, 19); // Цвет земли
 
-      // Отрисовка тоннелей и неба/поверхности
+      // Отрисовка тоннелей и поверхности
       for (let y = 0; y < ROWS; y++) {
         for (let x = 0; x < COLS; x++) {
           if (grid[y][x] === 1) {
-            // Если это верхняя часть — красим как небо/траву, ниже — как пещеру
+            // Если это верхняя часть — красим как траву, ниже — как пещеру
             if (y < Math.floor(ROWS * 0.3)) {
-              p.fill(135, 206, 235); // Небо
+              p.fill(80,200,120); // Небо
             } else {
               p.fill(222, 184, 135); // Пещера
             }
@@ -292,10 +316,6 @@ const initP5 = () => {
         }
       }
 
-      // Отрисовка центрального гнезда (Муравейника)
-      //p.fill(100, 50, 20);
-      //p.ellipse(WIDTH / 2, HEIGHT * 0.6, 30, 20);
-
       // Отрисовка еды
       for (let f of foods) {
         p.fill(34, 139, 34); // Зеленые маркеры ресурсов
@@ -307,6 +327,12 @@ const initP5 = () => {
         ant.update();
         ant.display();
       }
+
+
+      p.fill(66, 184, 131); // Цвет Vue (зеленый)
+      p.noStroke();
+      // Используем текущее значение из Vue
+      p.ellipse(p.width / 2, p.height / 2, circleSize.value);
     };
   };
 
