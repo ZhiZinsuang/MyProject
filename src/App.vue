@@ -6,16 +6,7 @@
       <p>Муравьев: <strong>{{ antCount }}</strong> | Собранная еда: <strong class="food-score">{{ score }}</strong></p>
       
       
-      <div class="control-row">
-        <label for="size-slider">Размер круга: {{ circleSize }}px</label>
-        <input 
-          id="size-slider"
-          type="range" 
-          min="10" 
-          max="200" 
-          v-model.number="circleSize" 
-        />
-      </div>
+
       <div class="control-row">
         <label for="antChange">Размер круга: {{ antCount }}px</label>
         <input 
@@ -24,6 +15,17 @@
           min="10" 
           max="200" 
           v-model.number="antCount" 
+        />
+      </div>
+      <div class="control-row">
+        <label for="changeCource">Вероятность смены курса по феромонам: {{ chanceChangeCource }}</label>
+        <input 
+          id="changeCource"
+          type="range" 
+          min="0.1" 
+          max="1" 
+          step="0.1"
+          v-model.number="chanceChangeCource" 
         />
       </div>
 
@@ -41,9 +43,8 @@ import p5 from 'p5';
 const canvasContainer = ref(null);
 const antCount = ref(150); 
 const score = ref(0);
+const chanceChangeCource = ref(0.5)
 let p5Instance = null;
-
-const circleSize = ref(100);
 
 // Настройки сетки
 const COLS = 50;
@@ -122,7 +123,7 @@ class Ant {
     }
 
     //  Выбор направления на основе феромонов 
-    if (this.p.random(1) < 0.5) { // 50% шанс скорректировать курс по запаху
+    if (this.p.random(1) < chanceChangeCource.value) { // 50% шанс скорректировать курс по запаху
       let targetGrid = this.hasFood ? homePheromone : foodPheromone;
       let bestX = this.vx;
       let bestY = this.vy;
@@ -190,6 +191,43 @@ class Ant {
       this.p.fill(40, 20, 10); // Обычный коричневый
     }
     this.p.ellipse(this.x, this.y, 4, 4);
+  }
+}
+
+class Queen {
+  constructor(p) {
+    this.p = p;
+    // Размещаем матку точно в центре стартовой камеры (дома)
+    this.x = WIDTH / 2;
+    this.y = HEIGHT * 0.6;
+    this.size = 14;          // Матка заметно крупнее обычного муравья
+    this.spawnCooldown = 90; // Спавн каждые 90 кадров (примерно 1.5 секунды при 60 FPS)
+    this.timer = 0;
+  }
+
+  update(antsArray) {
+    this.timer++;
+
+    // Проверяем кулдаун
+    if (this.timer >= this.spawnCooldown) {
+      this.timer = 0;
+      
+      // Создаем нового муравья и пушим в массив симуляции
+      // Передаем контекст p5 (this.p)
+      antsArray.push(new Ant(this.p)); 
+      
+      // Логируем в реактивную переменную Vue (опционально, увеличивает счетчик на UI)
+      antCount.value = antsArray.length;
+    }
+  }
+
+  display() {
+    this.p.noStroke();
+    this.p.fill(80, 10, 10); // Темно-бордовый, почти черный цвет для матки
+    
+    // Рисуем матку в виде крупного вытянутого муравья (из двух сегментов)
+    this.p.ellipse(this.x, this.y, this.size, this.size * 0.8);
+    this.p.ellipse(this.x - 4, this.y, this.size * 0.7, this.size * 0.7); // Брюшко
   }
 }
 
@@ -282,6 +320,7 @@ const generateMap = () => {
 const initP5 = () => {
   const sketch = (p) => {
     let ants = [];
+    let queen = null;
 
     p.setup = () => {
       p.createCanvas(WIDTH, HEIGHT).parent(canvasContainer.value);
@@ -289,6 +328,7 @@ const initP5 = () => {
       for (let i = 0; i < antCount.value; i++) {
         ants.push(new Ant(p));
       }
+      queen = new Queen(p);   // Создаём матку
     };
 
     p.draw = () => {
@@ -324,8 +364,14 @@ const initP5 = () => {
 
       // Отрисовка еды
       for (let f of foods) {
-        p.fill(34, 139, 34); // Зеленые маркеры ресурсов
+        p.fill(34, 139, 34);    // Зеленые маркеры ресурсов
         p.ellipse(f.x, f.y, f.radius);
+      }
+
+      // Обновление и отрисовка матки 
+      if (queen) {
+        queen.update(ants);
+        queen.display();
       }
 
       // Обновление и отрисовка муравьев
@@ -333,12 +379,6 @@ const initP5 = () => {
         ant.update();
         ant.display();
       }
-
-
-      p.fill(66, 184, 131); // Цвет Vue (зеленый)
-      p.noStroke();
-      // Используем текущее значение из Vue
-      p.ellipse(p.width / 2, p.height / 2, circleSize.value);
     };
   };
 
