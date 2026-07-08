@@ -43,7 +43,7 @@ const antCount = ref(150);
 const score = ref(0);
 let p5Instance = null;
 
-const circleSize = ref(100);
+const circleSize = ref(100);    //никчемушка
 
 // Настройки сетки
 const COLS = 50;
@@ -52,10 +52,7 @@ const CELL_SIZE = 12;
 const WIDTH = COLS * CELL_SIZE;
 const HEIGHT = ROWS * CELL_SIZE;
 
-let grid = [];
-let homePheromone = [];
-let foodPheromone = [];
-let foods = [];
+
 
 // Класс Еды
 class Food {
@@ -69,8 +66,9 @@ class Food {
 
 // Класс Муравья
 class Ant {
-  constructor(p) {
+  constructor(p, g) {
     this.p = p;
+    this.g = g;
     this.homeX = WIDTH / 2;
     this.homeY = HEIGHT * 0.6;
     this.x = this.homeX;
@@ -87,6 +85,12 @@ class Ant {
   update() {
     let cellX = Math.floor(this.x / CELL_SIZE);   //определяем индексы клетки, в которой находится муравей
     let cellY = Math.floor(this.y / CELL_SIZE);
+
+    // Получаем данные карты
+    let grid = this.g.getGrid;
+    let homePheromone = this.g.getHomePheromone;
+    let foodPheromone = this.g.getFoodPheromone;
+    let foods = this.g.getFoods;
 
     //  Оставляем феромоны на текущей позиции (если внутри тоннеля/на поверхности)
     if (cellX >= 0 && cellX < COLS && cellY >= 0 && cellY < ROWS) {
@@ -105,7 +109,7 @@ class Ant {
         if (this.p.dist(this.x, this.y, f.x, f.y) < f.radius) {
           this.hasFood = true;
           f.amount -= 1;
-          if (f.amount <= 0) foods.splice(i, 1); // Съели источник
+          if (f.amount <= 0) foods.splice(i, 1); // Съели источник, источник пропадает
           this.vx *= -1; // Разворот домой
           this.vy *= -1;
           break;
@@ -193,101 +197,127 @@ class Ant {
   }
 }
 
-// Генератор карты
-const generateMap = () => {
-  grid = Array(ROWS).fill().map(() => Array(COLS).fill(0));
-  homePheromone = Array(ROWS).fill().map(() => Array(COLS).fill(0));
-  foodPheromone = Array(ROWS).fill().map(() => Array(COLS).fill(0));
-  foods = [];
-  score.value = 0;
-
-  // Поверхность (верхняя треть карты полностью открыта для вольного хождения)
-  for (let y = 0; y < Math.floor(ROWS * 0.3); y++) {
-    for (let x = 0; x < COLS; x++) {
-      grid[y][x] = 1;
-    }
+class GenMap{
+  constructor(){
+    this.grid = [];
+    this.homePheromone = [];
+    this.foodPheromone = [];
+    this.foods = [];
   }
 
-  // Стартовая камера в центре под землей
-  const centerX = Math.floor(COLS / 2);
-  const centerY = Math.floor(ROWS * 0.6);
-  for (let y = centerY - 2; y <= centerY + 2; y++) {
-    for (let x = centerX - 3; x <= centerX + 3; x++) {
-      grid[y][x] = 1;
-    }
-  }
+  // Генератор карты
+  generateMap = () => {
+    this.grid = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+    this.homePheromone = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+    this.foodPheromone = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+    this.foods = [];
+    score.value = 0;
 
-  // Копаем тоннели, включая те, что ведут на поверхность
-  for (let i = 0; i < 5; i++) {
-    let cx = centerX;
-    let cy = centerY;
-    let ban = null;
-    for (let steps = 0; steps < 200; steps++) {
-      let dir = Math.floor(Math.random() * 4);  //случайное число от 0 до 3
-      if (dir === 0 && i != 3) cx++;
-      if (dir === 1 && i != 2) cx--;
-      if (dir === 2 && i >= 2) cy++;
-      if (dir === 3 && i != 4) cy--;
-
-      cx = Math.max(2, Math.min(COLS - 2, cx));   //ограничения, чтоб не ушли за карту
-      cy = Math.max(1, Math.min(ROWS - 2, cy));
-      grid[cy][cx] = 1;
-      grid[cy - 1][cx] = 1;
-      grid[cy][cx - 1] = 1;
-
-      if (i < 2 && cy === 1) break;   //выход из цикла, если 2 первых копателя достигли верхней границы
-      else if (i < 2) {
-        grid[cy][cx + 1] = 1;
-        grid[cy - 1][cx] = 1;
-      }
-
-      // копаем камеру справа 
-      if (i === 2 && (cx === Math.floor(COLS * 0.8) || cy === Math.floor(ROWS * 0.4))){
-        for (let j = 0; j < 7; j++) {
-          grid[cy][cx + j] = 1;
-          grid[cy - 1][cx + j] = 1;
-          grid[cy - 2][cx + j] = 1;
-        }
-        break;
-      }
-
-      // копаем камеру слева
-      if (i === 3 && (cx === Math.floor(COLS * 0.2) || cy === Math.floor(ROWS * 0.4))){
-        for (let j = 0; j < 7; j++) {
-          grid[cy][cx - j] = 1;
-          grid[cy - 1][cx - j] = 1;
-          grid[cy - 2][cx - j] = 1;
-        }
-        break;
-      }
-
-      // копаем нижнюю камеру
-      if (i === 4 && cy === ROWS - 2){
-        for (let j = 0; j < 9; j++) {
-          grid[cy][cx - j] = 1;
-          grid[cy - 1][cx - j] = 1;
-          grid[cy - 2][cx - j] = 1;
-        }
-        break;
+    // Поверхность (верхняя треть карты полностью открыта для вольного хождения)
+    for (let y = 0; y < Math.floor(ROWS * 0.3); y++) {
+      for (let x = 0; x < COLS; x++) {
+        this.grid[y][x] = 1;
       }
     }
+
+    // Стартовая камера в центре под землей
+    const centerX = Math.floor(COLS / 2);
+    const centerY = Math.floor(ROWS * 0.6);
+    for (let y = centerY - 2; y <= centerY + 2; y++) {
+      for (let x = centerX - 3; x <= centerX + 3; x++) {
+        this.grid[y][x] = 1;
+      }
+    }
+
+    // Копаем тоннели, включая те, что ведут на поверхность
+    for (let i = 0; i < 5; i++) {
+      let cx = centerX;
+      let cy = centerY;
+      for (let steps = 0; steps < 200; steps++) {
+        let dir = Math.floor(Math.random() * 4);  //случайное число от 0 до 3
+        if (dir === 0 && i != 3) cx++;
+        if (dir === 1 && i != 2) cx--;
+        if (dir === 2 && i >= 2) cy++;
+        if (dir === 3 && i != 4) cy--;
+
+        cx = Math.max(2, Math.min(COLS - 2, cx));   //ограничения, чтоб не ушли за карту
+        cy = Math.max(1, Math.min(ROWS - 2, cy));
+        this.grid[cy][cx] = 1;
+        this.grid[cy - 1][cx] = 1;
+        this.grid[cy][cx - 1] = 1;
+
+        if (i < 2 && cy === 1) break;   //выход из цикла, если 2 первых копателя достигли верхней границы
+        else if (i < 2) {
+          this.grid[cy][cx + 1] = 1;
+          this.grid[cy - 1][cx] = 1;
+        }
+
+        // копаем камеру справа 
+        if (i === 2 && (cx === Math.floor(COLS * 0.8) || cy === Math.floor(ROWS * 0.4))){
+          for (let j = 0; j < 7; j++) {
+            this.grid[cy][cx + j] = 1;
+            this.grid[cy - 1][cx + j] = 1;
+            this.grid[cy - 2][cx + j] = 1;
+          }
+          break;
+        }
+
+        // копаем камеру слева
+        if (i === 3 && (cx === Math.floor(COLS * 0.2) || cy === Math.floor(ROWS * 0.4))){
+          for (let j = 0; j < 7; j++) {
+            this.grid[cy][cx - j] = 1;
+            this.grid[cy - 1][cx - j] = 1;
+            this.grid[cy - 2][cx - j] = 1;
+          }
+          break;
+        }
+
+        // копаем нижнюю камеру
+        if (i === 4 && cy === ROWS - 2){
+          for (let j = 0; j < 9; j++) {
+            this.grid[cy][cx - j] = 1;
+            this.grid[cy - 1][cx - j] = 1;
+            this.grid[cy - 2][cx - j] = 1;
+          }
+          break;
+        }
+      }
+    }
+
+    //  Генерируем 3 кучки еды на поверхности
+    this.foods.push(new Food(WIDTH * 0.2, HEIGHT * 0.15, 150));
+    this.foods.push(new Food(WIDTH * 0.5, HEIGHT * 0.10, 150));
+    this.foods.push(new Food(WIDTH * 0.8, HEIGHT * 0.15, 150));
+  };
+
+  get getGrid(){
+    return this.grid;
   }
 
-  //  Генерируем 3 кучки еды на поверхности
-  foods.push(new Food(WIDTH * 0.2, HEIGHT * 0.15, 150));
-  foods.push(new Food(WIDTH * 0.5, HEIGHT * 0.10, 150));
-  foods.push(new Food(WIDTH * 0.8, HEIGHT * 0.15, 150));
-};
+  get getFoodPheromone(){
+    return this.foodPheromone;
+  }
+
+  get getHomePheromone(){
+    return this.homePheromone;
+  }
+
+  get getFoods() { 
+    return this.foods; 
+  }
+}
 
 const initP5 = () => {
   const sketch = (p) => {
     let ants = [];
+    let g = new GenMap();
+    let grid, homePheromone, foodPheromone, foods;
 
     p.setup = () => {
       p.createCanvas(WIDTH, HEIGHT).parent(canvasContainer.value);
-      generateMap();
+      g.generateMap();
       for (let i = 0; i < antCount.value; i++) {
-        ants.push(new Ant(p));
+        ants.push(new Ant(p, g));
       }
     };
 
