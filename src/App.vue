@@ -1,30 +1,36 @@
 <template>
+  <h3 class="title-style">Муравейник с едой и феромонами</h3>
   <div class="simulation-container">
-    <div class="controls">
-      <h3>Муравейник с едой и феромонами</h3>
-      <p>Муравьев: <strong>{{ antCount }}</strong> | Собранная еда: <strong class="food-score">{{ score }}</strong></p>
-      <button @click="resetSimulation">Перегенерировать мир</button>
-      
-      <label for="size-slider">Размер круга: {{ circleSize }}px</label>
-    <input 
-      id="size-slider"
-      type="range" 
-      min="10" 
-      max="200" 
-      v-model.number="circleSize" 
-    />
-
-    <label for="antChange">Размер круга: {{ antCount }}px</label>
-    <input 
-      id="antChange"
-      type="range" 
-      min="10" 
-      max="200" 
-      v-model.number="antCount" 
-    />
-
-    </div>
     <div ref="canvasContainer" class="canvas-holder"></div>
+    <div class="controls">
+      <p>Муравьев: <strong>{{ antCount }}</strong> | Собранная еда: <strong class="food-score">{{ score }}</strong></p>
+      
+      
+      <div class="control-row">
+        <label for="size-slider">Размер круга: {{ circleSize }}px</label>
+        <input 
+          id="size-slider"
+          type="range" 
+          min="10" 
+          max="200" 
+          v-model.number="circleSize" 
+        />
+      </div>
+      <div class="control-row">
+        <label for="antChange">Размер круга: {{ antCount }}px</label>
+        <input 
+          id="antChange"
+          type="range" 
+          min="10" 
+          max="200" 
+          v-model.number="antCount" 
+        />
+      </div>
+
+      
+
+      <button @click="resetSimulation">Перегенерировать мир</button>
+    </div>
   </div>
 </template>
 
@@ -351,16 +357,28 @@ onBeforeUnmount(() => { if (p5Instance) p5Instance.remove(); });
 </script>
 
 <style scoped>
+.control-row{
+  margin: 3px;
+}
+.title-style{
+  margin-bottom: 15px;
+  text-align: center;
+  font-family: sans-serif;
+  color: #333;
+}
 .simulation-container {
   display: flex;
-  flex-direction: column;
-  align-items: left;
+
   font-family: sans-serif;
   color: #333;
 }
 .controls {
   margin-bottom: 15px;
   text-align: center;
+  border: 4px solid #451a03;
+  width: 40%;
+
+  display: block;
 }
 .food-score {
   color: #16a34a;
@@ -374,6 +392,7 @@ button {
   border-radius: 4px;
   cursor: pointer;
   font-weight: bold;
+  margin: 7px;
 }
 button:hover {
   background-color: #047857;
@@ -382,5 +401,7 @@ button:hover {
   border: 4px solid #451a03;
   border-radius: 8px;
   overflow: hidden;
+  width: v-bind(WIDTH + 'px');
+  height: v-bind(HEIGHT + 'px')
 }
 </style>
