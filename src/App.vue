@@ -47,6 +47,8 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import p5 from 'p5';
 
+// работает - не трогай
+
 const canvasContainer = ref(null);
 const antCount = ref(150); 
 const score = ref(0);
