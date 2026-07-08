@@ -3,16 +3,27 @@
   <div class="simulation-container">
     <div ref="canvasContainer" class="canvas-holder"></div>
     <div class="controls">
-      <p>Муравьев: <strong>{{ antCount }}</strong> | Собранная еда: <strong class="food-score">{{ score }}</strong></p>
+      <p>Муравьёв всего: <strong>{{ antCount +  defenderAntCount}}</strong> | Собранная еда: <strong class="food-score">{{ score }}</strong></p>
 
       <div class="control-row">
-        <label for="antChange">Количество муравьёв: {{ antCount }}</label>
+        <label for="antChange">Муравьёв обычных: {{ antCount }}</label>
         <input 
           id="antChange"
           type="range" 
           min="10" 
           max="200" 
           v-model.number="antCount" 
+        />
+      </div>
+      <div class="control-row">
+        <label for="defAntCount">Муравьёв-защитников: {{ defenderAntCount }}</label>
+        <input 
+          id="defAntCount"
+          type="range" 
+          min="5" 
+          max="30" 
+          step="1"
+          v-model.number="defenderAntCount" 
         />
       </div>
       <div class="control-row">
@@ -27,6 +38,17 @@
         />
       </div>
       <div class="control-row">
+        <label for="changeBirth">Вероятность рождения защитника: {{ changeBirthDefAnt*100 }}%</label>
+        <input 
+          id="changeBirth"
+          type="range" 
+          min="0.1" 
+          max="1" 
+          step="0.1"
+          v-model.number="changeBirthDefAnt" 
+        />
+      </div>
+      <div class="control-row">
         <label for="radiusAh">Радиус муравейника: {{ radiusAnthill }}px</label>
         <input 
           id="radiusAh"
@@ -37,6 +59,7 @@
           v-model.number="radiusAnthill" 
         />
       </div>
+      
 
       <button @click="resetSimulation">Перегенерировать мир</button>
     </div>
@@ -51,9 +74,12 @@ import p5 from 'p5';
 
 const canvasContainer = ref(null);
 const antCount = ref(150); 
+const defenderAntCount = ref(15);
 const score = ref(0);
 const chanceChangeCource = ref(0.5);
+const changeBirthDefAnt = ref(0.2)
 const radiusAnthill = ref(60);
+
 let p5Instance = null;
 
 // Настройки сетки
@@ -67,6 +93,7 @@ let grid = [];
 let homePheromone = [];
 let foodPheromone = [];
 let foods = [];
+let enemies = [];
 
 // Класс Еды
 class Food {
@@ -216,7 +243,7 @@ class Queen {
     this.timer = 0;
   }
 
-  update(antsArray) {
+  update(antsArray, defAntsArray) {
     this.timer++;
 
     // Проверяем кулдаун
@@ -225,10 +252,14 @@ class Queen {
       
       // Создаем нового муравья и передаем в массив симуляции
       // Передаем контекст p5 (this.p)
-      antsArray.push(new Ant(this.p)); 
-      
-      // Логируем в реактивную переменную Vue 
-      antCount.value = antsArray.length;
+      if (this.p.random(1) < changeBirthDefAnt.value){
+        defAntsArray.push(new DefenderAnt(this.p));
+        defenderAntCount.value = defAntsArray.length;
+      }
+      else{
+        antsArray.push(new Ant(this.p)); 
+        antCount.value = antsArray.length;
+      }
     }
   }
 
@@ -297,7 +328,124 @@ class Enemy {
   }
 }
 
+class DefenderAnt {
+  constructor(p) {
+    this.p = p;
+    this.homeX = WIDTH / 2;
+    this.homeY = HEIGHT * 0.6;
+    this.x = this.homeX;
+    this.y = this.homeY;
+    
+    let angle = p.random(p.TWO_PI);
+    this.vx = p.cos(angle) * 1.5;
+    this.vy = p.sin(angle) * 1.5;
+    
+    this.searchRadius = 40; // Защитники видят дальше обычных муравьев
+    this.attackDamage = 0.5; // Урон, наносимый врагу за кадр
+  }
 
+  update() {
+    let cellX = Math.floor(this.x / CELL_SIZE);
+    let cellY = Math.floor(this.y / CELL_SIZE);
+
+    // Оставляют след дома
+    if (cellX >= 0 && cellX < COLS && cellY >= 0 && cellY < ROWS) {
+      homePheromone[cellY][cellX] = 255;
+    }
+
+    // ПОИСК ВРАГА
+    let targetEnemy = null;
+    let closestDist = this.searchRadius;
+
+    for (let i = 0; i < enemies.length; i++) {
+      let d = this.p.dist(this.x, this.y, enemies[i].x, enemies[i].y);
+      if (d < closestDist) {
+        closestDist = d;
+        targetEnemy = enemies[i];
+      }
+    }
+
+    if (targetEnemy) {
+      // Идем напрямую к врагу
+      let angleToEnemy = this.p.atan2(targetEnemy.y - this.y, targetEnemy.x - this.x);
+      let targetVx = this.p.cos(angleToEnemy) * 1.8; // Чуть быстрее обычного хода
+      let targetVy = this.p.sin(angleToEnemy) * 1.8;
+      
+      this.vx = this.p.lerp(this.vx, targetVx, 0.2);
+      this.vy = this.p.lerp(this.vy, targetVy, 0.2);
+
+      // Если дошли до врага — атакуем
+      if (closestDist < targetEnemy.radius) {
+        targetEnemy.hp -= this.attackDamage;
+        // Отталкиваемся немного назад после укуса, создавая эффект анимации атаки
+        this.vx *= -0.5;
+        this.vy *= -0.5;
+      }
+    } else {
+      // ОБЫЧНОЕ ПАТРУЛИРОВАНИЕ (по домашним феромонам или хаотичное)
+      if (this.p.random(1) < chanceChangeCource.value) {
+        let bestX = this.vx;
+        let bestY = this.vy;
+        let maxPheromone = 0;
+
+        for (let i = 0; i < 5; i++) {
+          let sampleAngle = this.p.atan2(this.vy, this.vx) + this.p.random(-0.8, 0.8);
+          let checkX = this.x + this.p.cos(sampleAngle) * this.searchRadius;
+          let checkY = this.y + this.p.sin(sampleAngle) * this.searchRadius;
+          let cx = Math.floor(checkX / CELL_SIZE);
+          let cy = Math.floor(checkY / CELL_SIZE);
+
+          if (cx >= 0 && cx < COLS && cy >= 0 && cy < ROWS && grid[cy][cx] === 1) {
+            if (homePheromone[cy][cx] > maxPheromone) {
+              maxPheromone = homePheromone[cy][cx];
+              bestX = this.p.cos(sampleAngle) * 1.5;
+              bestY = this.p.sin(sampleAngle) * 1.5;
+            }
+          }
+        }
+        if (maxPheromone > 10) {
+          this.vx = this.p.lerp(this.vx, bestX, 0.4);
+          this.vy = this.p.lerp(this.vy, bestY, 0.4);
+        }
+      }
+
+      // Случайный шум
+      this.vx += this.p.random(-0.2, 0.2);
+      this.vy += this.p.random(-0.2, 0.2);
+    }
+
+    // Ограничение скорости
+    let speed = this.p.mag(this.vx, this.vy);
+    if (speed > 2.2) {
+      this.vx = (this.vx / speed) * 2.2;
+      this.vy = (this.vy / speed) * 2.2;
+    } else if (speed < 0.5 && speed > 0) {
+      this.vx = (this.vx / speed) * 0.5;
+      this.vy = (this.vy / speed) * 0.5;
+    }
+
+    // Движение и отскок от стен
+    let nextX = this.x + this.vx;
+    let nextY = this.y + this.vy;
+    let nCellX = Math.floor(nextX / CELL_SIZE);
+    let nCellY = Math.floor(nextY / CELL_SIZE);
+
+    if (nCellX < 0 || nCellX >= COLS || nCellY < 0 || nCellY >= ROWS || grid[nCellY][nCellX] === 0) {
+      let angle = this.p.atan2(this.vy, this.vx) + this.p.PI + this.p.random(-1, 1);
+      this.vx = this.p.cos(angle) * 1.5;
+      this.vy = this.p.sin(angle) * 1.5;
+    } else {
+      this.x = nextX;
+      this.y = nextY;
+    }
+  }
+
+  display() {
+    this.p.noStroke();
+    this.p.fill(150, 0, 0); // Муравьи-защитники будут темно-красными
+    this.p.ellipse(this.x, this.y, 6, 6); // И чуть крупнее обычных
+  }
+}
 
 // Генератор карты
 const generateMap = () => {
@@ -390,7 +538,7 @@ const initP5 = () => {
     let ants = [];
     let queen = null;
     let defenderAnts = [];
-    let enemies = [];
+    
 
     p.setup = () => {
       p.createCanvas(WIDTH, HEIGHT).parent(canvasContainer.value);
@@ -399,6 +547,9 @@ const initP5 = () => {
         ants.push(new Ant(p));
       }
       queen = new Queen(p);   // Создаём матку
+      for (let i = 0; i < defenderAntCount.value; i++) {
+        defenderAnts.push(new DefenderAnt(p)); 
+      }
     };
 
     p.draw = () => {
@@ -440,7 +591,7 @@ const initP5 = () => {
 
       // Обновление и отрисовка матки 
       if (queen) {
-        queen.update(ants);
+        queen.update(ants, defenderAnts);
         queen.display();
       }
 
@@ -457,6 +608,12 @@ const initP5 = () => {
           enemies.splice(i, 1); // Враг побежден — удаляем
         }
       }
+
+      // Обновление и отрисовка защитников
+      for (let dant of defenderAnts) {
+        dant.update();
+        dant.display();
+      }
       
     };
 
@@ -465,7 +622,7 @@ const initP5 = () => {
       let cellY = Math.floor(p.mouseY / CELL_SIZE);
 
       // Проверяем, что кликнули внутри экрана и по ПУСТОЙ клетке (grid === 1)
-      if (cellX >= 0 && cellX < COLS && cellY >= 0 && cellY < ROWS) {
+      if (cellX >= 0 && cellX < COLS && cellY >= 0 && cellY < ROWS && cellY < ROWS*0.3) {
         if (grid[cellY][cellX] === 1) {
           enemies.push(new Enemy(p, p.mouseX, p.mouseY));
         }
