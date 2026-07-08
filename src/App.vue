@@ -1,12 +1,12 @@
 <template>
-  <h3 class="title-style">Муравейник с едой и феромонами</h3>
+  <h2 class="title-style">Симуляция муравейника</h2>
   <div class="simulation-container">
     <div ref="canvasContainer" class="canvas-holder"></div>
     <div class="controls">
       <p>Муравьев: <strong>{{ antCount }}</strong> | Собранная еда: <strong class="food-score">{{ score }}</strong></p>
 
       <div class="control-row">
-        <label for="antChange">Размер круга: {{ antCount }}px</label>
+        <label for="antChange">Количество муравьёв: {{ antCount }}</label>
         <input 
           id="antChange"
           type="range" 
@@ -16,7 +16,7 @@
         />
       </div>
       <div class="control-row">
-        <label for="changeCource">Вероятность смены курса по феромонам: {{ chanceChangeCource }}</label>
+        <label for="changeCource">Вероятность смены курса по феромонам: {{ chanceChangeCource*100 }}%</label>
         <input 
           id="changeCource"
           type="range" 
@@ -27,7 +27,7 @@
         />
       </div>
       <div class="control-row">
-        <label for="radiusAh">Радиус муравейника {{ radiusAnthill }}</label>
+        <label for="radiusAh">Радиус муравейника: {{ radiusAnthill }}px</label>
         <input 
           id="radiusAh"
           type="range" 
@@ -405,11 +405,14 @@ onBeforeUnmount(() => { if (p5Instance) p5Instance.remove(); });
 </script>
 
 <style scoped>
+input{
+  margin-left: 10px;
+}
 .control-row{
-  margin: 3px;
+  margin-bottom: 5px;
 }
 .title-style{
-  margin-bottom: 15px;
+  margin-bottom: 20px;
   text-align: center;
   font-family: sans-serif;
   color: #333;
@@ -422,9 +425,14 @@ onBeforeUnmount(() => { if (p5Instance) p5Instance.remove(); });
 }
 .controls {
   margin-bottom: 15px;
+  margin-left: 30px;
+  margin-top: 15px;
   text-align: center;
-  border: 4px solid #451a03;
+  border: 4px solid #225a26;
+  border-radius: 8px;
+  background-color: #cae4cc;
   width: 40%;
+  height: 300px;
 
   display: block;
 }
@@ -450,6 +458,7 @@ button:hover {
   border-radius: 8px;
   overflow: hidden;
   width: v-bind(WIDTH + 'px');
-  height: v-bind(HEIGHT + 'px')
+  height: v-bind(HEIGHT + 'px');
+  margin: 15px;
 }
 </style>
