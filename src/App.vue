@@ -4,8 +4,6 @@
     <div ref="canvasContainer" class="canvas-holder"></div>
     <div class="controls">
       <p>Муравьев: <strong>{{ antCount }}</strong> | Собранная еда: <strong class="food-score">{{ score }}</strong></p>
-      
-      
 
       <div class="control-row">
         <label for="antChange">Размер круга: {{ antCount }}px</label>
@@ -28,8 +26,17 @@
           v-model.number="chanceChangeCource" 
         />
       </div>
-
-      
+      <div class="control-row">
+        <label for="radiusAh">Радиус муравейника {{ radiusAnthill }}</label>
+        <input 
+          id="radiusAh"
+          type="range" 
+          min="40" 
+          max="100" 
+          step="5"
+          v-model.number="radiusAnthill" 
+        />
+      </div>
 
       <button @click="resetSimulation">Перегенерировать мир</button>
     </div>
@@ -43,7 +50,8 @@ import p5 from 'p5';
 const canvasContainer = ref(null);
 const antCount = ref(150); 
 const score = ref(0);
-const chanceChangeCource = ref(0.5)
+const chanceChangeCource = ref(0.5);
+const radiusAnthill = ref(60);
 let p5Instance = null;
 
 // Настройки сетки
@@ -114,7 +122,7 @@ class Ant {
       }
     } else {
       // Несет еду домой
-      if (this.p.dist(this.x, this.y, this.homeX, this.homeY) < 60) {
+      if (this.p.dist(this.x, this.y, this.homeX, this.homeY) < radiusAnthill.value) {
         this.hasFood = false;
         score.value++; // Очко муравейнику
         this.vx *= -1; // Разворот на поиски
@@ -201,7 +209,7 @@ class Queen {
     this.x = WIDTH / 2;
     this.y = HEIGHT * 0.6;
     this.size = 14;          // Матка заметно крупнее обычного муравья
-    this.spawnCooldown = 90; // Спавн каждые 90 кадров (примерно 1.5 секунды при 60 FPS)
+    this.spawnCooldown = 180; // Спавн каждые 180 кадров (примерно 3 секунды при 60 FPS)
     this.timer = 0;
   }
 
@@ -212,18 +220,18 @@ class Queen {
     if (this.timer >= this.spawnCooldown) {
       this.timer = 0;
       
-      // Создаем нового муравья и пушим в массив симуляции
+      // Создаем нового муравья и передаем в массив симуляции
       // Передаем контекст p5 (this.p)
       antsArray.push(new Ant(this.p)); 
       
-      // Логируем в реактивную переменную Vue (опционально, увеличивает счетчик на UI)
+      // Логируем в реактивную переменную Vue 
       antCount.value = antsArray.length;
     }
   }
 
   display() {
     this.p.noStroke();
-    this.p.fill(80, 10, 10); // Темно-бордовый, почти черный цвет для матки
+    this.p.fill(80, 10, 10); // Темно-бордовый
     
     // Рисуем матку в виде крупного вытянутого муравья (из двух сегментов)
     this.p.ellipse(this.x, this.y, this.size, this.size * 0.8);
