@@ -69,209 +69,34 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import p5 from 'p5';
+import {Food} from '../components/Food.js';
+import { Queen } from '../components/Queen.js';
+import { Ant } from '../components/Ant.js';
+import {  antCount, defenderAntCount, 
+  score, chanceChangeCource, changeBirthDefAnt, radiusAnthill
+ } from '../components/settings.js';
+import { homePheromone, foodPheromone, grid, enemies, foods, 
+  WIDTH, HEIGHT, CELL_SIZE, ROWS, COLS
+ } from '../components/config.js'
 
 // работает - не трогай
 
 const canvasContainer = ref(null);
-const antCount = ref(150); 
-const defenderAntCount = ref(15);
-const score = ref(0);
-const chanceChangeCource = ref(0.5);
-const changeBirthDefAnt = ref(0.2)
-const radiusAnthill = ref(60);
-
 let p5Instance = null;
 
 // Настройки сетки
-const COLS = 50;
-const ROWS = 40;
-const CELL_SIZE = 12;
-const WIDTH = COLS * CELL_SIZE;
-const HEIGHT = ROWS * CELL_SIZE;
 
-let grid = [];
-let homePheromone = [];
-let foodPheromone = [];
-let foods = [];
-let enemies = [];
+
+
 
 // Класс Еды
-class Food {
-  constructor(x, y, amount = 100) {
-    this.x = x;
-    this.y = y;
-    this.amount = amount;
-    this.radius = 15;
-  }
-}
+
 
 // Класс Муравья
-class Ant {
-  constructor(p) {
-    this.p = p;
-    this.homeX = WIDTH / 2;
-    this.homeY = HEIGHT * 0.6;
-    this.x = this.homeX;
-    this.y = this.homeY;
-    
-    let angle = p.random(p.TWO_PI);
-    this.vx = p.cos(angle) * 1.5;
-    this.vy = p.sin(angle) * 1.5;
-    
-    this.hasFood = false;
-    this.searchRadius = 25; // Радиус обзора для поиска еды/дома/феромонов
-  }
 
-  update() {
-    let cellX = Math.floor(this.x / CELL_SIZE);   //определяем индексы клетки, в которой находится муравей
-    let cellY = Math.floor(this.y / CELL_SIZE);
-
-    //  Оставляем феромоны на текущей позиции (если внутри тоннеля/на поверхности)
-    if (cellX >= 0 && cellX < COLS && cellY >= 0 && cellY < ROWS) {
-      if (this.hasFood) {
-        foodPheromone[cellY][cellX] = 255; // Сильный след еды
-      } else {
-        homePheromone[cellY][cellX] = 255; // Сильный след дома
-      }
-    }
-
-    //  Взаимодействие с едой и домом
-    if (!this.hasFood) {
-      // Ищем еду поблизости
-      for (let i = foods.length - 1; i >= 0; i--) {
-        let f = foods[i];
-        if (this.p.dist(this.x, this.y, f.x, f.y) < f.radius) {
-          this.hasFood = true;
-          f.amount -= 1;
-          if (f.amount <= 0) foods.splice(i, 1); // Съели источник
-          this.vx *= -1; // Разворот домой
-          this.vy *= -1;
-          break;
-        }
-      }
-    } else {
-      // Несет еду домой
-      if (this.p.dist(this.x, this.y, this.homeX, this.homeY) < radiusAnthill.value) {
-        this.hasFood = false;
-        score.value++; // Очко муравейнику
-        this.vx *= -1; // Разворот на поиски
-        this.vy *= -1;
-      }
-    }
-
-    //  Выбор направления на основе феромонов 
-    if (this.p.random(1) < chanceChangeCource.value) { // 50% шанс скорректировать курс по запаху
-      let targetGrid = this.hasFood ? homePheromone : foodPheromone;
-      let bestX = this.vx;
-      let bestY = this.vy;
-      let maxPheromone = 0;
-
-      // Проверяем 5 случайных точек впереди себя
-      for (let i = 0; i < 5; i++) {
-        let sampleAngle = this.p.atan2(this.vy, this.vx) + this.p.random(-0.8, 0.8);
-        let checkX = this.x + this.p.cos(sampleAngle) * this.searchRadius;
-        let checkY = this.y + this.p.sin(sampleAngle) * this.searchRadius;
-        
-        let cx = Math.floor(checkX / CELL_SIZE);
-        let cy = Math.floor(checkY / CELL_SIZE);
-
-        if (cx >= 0 && cx < COLS && cy >= 0 && cy < ROWS && grid[cy][cx] === 1) {
-          if (targetGrid[cy][cx] > maxPheromone) {
-            maxPheromone = targetGrid[cy][cx];
-            bestX = this.p.cos(sampleAngle) * 1.5;
-            bestY = this.p.sin(sampleAngle) * 1.5;
-          }
-        }
-      }
-      if (maxPheromone > 10) { // Если запах отчетливый — идем туда
-        this.vx = this.p.lerp(this.vx, bestX, 0.8);
-        this.vy = this.p.lerp(this.vy, bestY, 0.8);
-      }
-    }
-
-    // Добавляем немного хаотичного шума в движение
-    this.vx += this.p.random(-0.2, 0.2);
-    this.vy += this.p.random(-0.2, 0.2);
-    
-    // Ограничение скорости
-    let speed = this.p.dist(0, 0, this.vx, this.vy);
-    if (speed > 2) { 
-      this.vx = (this.vx / speed) * 2; 
-      this.vy = (this.vy / speed) * 2; 
-    }
-    if (speed < 0.5) { 
-      this.vx = (this.vx / speed) * 0.5; 
-      this.vy = (this.vy / speed) * 0.5; 
-    }
-
-    // Физика движения и отскоков от стен
-    let nextX = this.x + this.vx;
-    let nextY = this.y + this.vy;
-    let nCellX = Math.floor(nextX / CELL_SIZE);
-    let nCellY = Math.floor(nextY / CELL_SIZE);
-
-    if (nCellX < 0 || nCellX >= COLS || nCellY < 0 || nCellY >= ROWS || grid[nCellY][nCellX] === 0) {
-      let angle = this.p.atan2(this.vy, this.vx) + this.p.PI + this.p.random(-1, 1);
-      this.vx = this.p.cos(angle) * 1.5;
-      this.vy = this.p.sin(angle) * 1.5;
-    } else {
-      this.x = nextX;
-      this.y = nextY;
-    }
-  }
-
-  display() {
-    this.p.noStroke();
-    if (this.hasFood) {
-      this.p.fill(0, 200, 0); // Зеленый, если несет еду
-    } else {
-      this.p.fill(40, 20, 10); // Обычный коричневый
-    }
-    this.p.ellipse(this.x, this.y, 4, 4);
-  }
-}
 
 // Класс Королевы
-class Queen {
-  constructor(p) {
-    this.p = p;
-    // Размещаем матку точно в центре стартовой камеры (дома)
-    this.x = WIDTH / 2;
-    this.y = HEIGHT * 0.6;
-    this.size = 14;          // Матка заметно крупнее обычного муравья
-    this.spawnCooldown = 180; // Спавн каждые 180 кадров (примерно 3 секунды при 60 FPS)
-    this.timer = 0;
-  }
 
-  update(antsArray, defAntsArray) {
-    this.timer++;
-
-    // Проверяем кулдаун
-    if (this.timer >= this.spawnCooldown) {
-      this.timer = 0;
-      
-      // Создаем нового муравья и передаем в массив симуляции
-      // Передаем контекст p5 (this.p)
-      if (this.p.random(1) < changeBirthDefAnt.value){
-        defAntsArray.push(new DefenderAnt(this.p));
-        defenderAntCount.value = defAntsArray.length;
-      }
-      else{
-        antsArray.push(new Ant(this.p)); 
-        antCount.value = antsArray.length;
-      }
-    }
-  }
-
-  display() {
-    this.p.noStroke();
-    this.p.fill(80, 10, 10); // Темно-бордовый
-    
-    // Рисуем матку в виде крупного вытянутого муравья (из двух сегментов)
-    this.p.ellipse(this.x, this.y, this.size, this.size * 0.8);
-    this.p.ellipse(this.x - 4, this.y, this.size * 0.7, this.size * 0.7); // Брюшко
-  }
-}
 
 class Enemy {
   constructor(p, x, y) {
