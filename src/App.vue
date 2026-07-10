@@ -4,7 +4,6 @@
     <div ref="canvasContainer" class="canvas-holder"></div>
     <div class="controls">
       <p>Муравьёв всего: <strong>{{ antCount +  defenderAntCount}}</strong> | Собранная еда: <strong class="food-score">{{ score }}</strong></p>
-
       <div class="control-row">
         <label for="antChange">Муравьёв обычных: {{ antCount }}</label>
         <input 
@@ -59,8 +58,6 @@
           v-model.number="radiusAnthill" 
         />
       </div>
-      
-
       <button @click="resetSimulation">Перегенерировать мир</button>
     </div>
   </div>
@@ -69,48 +66,29 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import p5 from 'p5';
-import { Food } from '../components/Food.js';
-import { Queen } from '../components/Queen.js';
-import { Ant } from '../components/Ant.js';
-import { Enemy } from '../components/Enemy.js';
 import {  antCount, defenderAntCount, 
   score, chanceChangeCource, changeBirthDefAnt, radiusAnthill
 } from '../components/settings.js';
 import { homePheromone, foodPheromone, grid, enemies, foods, 
+  resetGrid, resetHomePheromone, resetFoodPheromone,
   WIDTH, HEIGHT, CELL_SIZE, ROWS, COLS
-} from '../components/config.js'
-
-// работает - не трогай
+} from '../components/config.js';
+import { Food } from '../components/Food.js';
+import { Queen } from '../components/Queen.js';
+import { Ant } from '../components/Ant.js';
+import { Enemy } from '../components/Enemy.js';
+import { DefenderAnt } from '../components/DefenderAnt.js';
 
 const canvasContainer = ref(null);
 let p5Instance = null;
 
-// Настройки сетки
-
-
-
-
-// Класс Еды
-
-
-// Класс Муравья
-
-
-// Класс Королевы
-
-
-
-
-
-
 // Генератор карты
 const generateMap = () => {
-  grid.length = 0;
-  grid = Array(ROWS).fill().map(() => Array(COLS).fill(0));
-  homePheromone = Array(ROWS).fill().map(() => Array(COLS).fill(0));
-  foodPheromone = Array(ROWS).fill().map(() => Array(COLS).fill(0));
-  foods = [];
-  score.value = 0;
+  resetGrid();            // Заполняем все массивы нулями (приводим в исходное состояние)
+  resetHomePheromone();
+  resetFoodPheromone();
+  foods.length = 0; 
+  score.value = 0;        // Обнуляем значение счётчика еды
 
   // Поверхность (верхняя треть карты полностью открыта для вольного хождения)
   for (let y = 0; y < Math.floor(ROWS * 0.3); y++) {
@@ -142,7 +120,7 @@ const generateMap = () => {
 
       cx = Math.max(2, Math.min(COLS - 2, cx));   //ограничения, чтоб не ушли за карту
       cy = Math.max(1, Math.min(ROWS - 2, cy));
-      grid[cy][cx] = 1;
+      grid[cy][cx] = 1;         //более широкие тоннели
       grid[cy - 1][cx] = 1;
       grid[cy][cx - 1] = 1;
 
@@ -195,17 +173,16 @@ const initP5 = () => {
     let ants = [];
     let queen = null;
     let defenderAnts = [];
-    
 
     p.setup = () => {
       p.createCanvas(WIDTH, HEIGHT).parent(canvasContainer.value);
       generateMap();
       for (let i = 0; i < antCount.value; i++) {
-        ants.push(new Ant(p));
+        ants.push(new Ant(p));  // Создаём мураьев обычных
       }
       queen = new Queen(p);   // Создаём матку
       for (let i = 0; i < defenderAntCount.value; i++) {
-        defenderAnts.push(new DefenderAnt(p)); 
+        defenderAnts.push(new DefenderAnt(p));    // Создаём муравьев-защитников
       }
     };
 
@@ -258,6 +235,7 @@ const initP5 = () => {
         ant.display();
       }
 
+      // Обновление и отрисовка врагов
       for (let i = enemies.length - 1; i >= 0; i--) {
         enemies[i].update();
         enemies[i].display();
@@ -271,9 +249,9 @@ const initP5 = () => {
         dant.update();
         dant.display();
       }
-      
     };
 
+    // Создание врага по клику мыши
     p.mousePressed = function() {
       let cellX = Math.floor(p.mouseX / CELL_SIZE);
       let cellY = Math.floor(p.mouseY / CELL_SIZE);
@@ -296,8 +274,6 @@ const resetSimulation = () => {
     initP5();
   }
 };
-
-
 
 onMounted(() => initP5());
 onBeforeUnmount(() => { if (p5Instance) p5Instance.remove(); });
