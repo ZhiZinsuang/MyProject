@@ -1,4 +1,4 @@
-import { CELL_SIZE, ROWS, COLS } from "./config";
+import { CELL_SIZE, ROWS, COLS, grid } from "./config";
 
 export class Enemy {
   constructor(p, x, y) {
