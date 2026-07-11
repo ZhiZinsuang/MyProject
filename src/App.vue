@@ -48,7 +48,7 @@
         />
       </div>
       <div class="control-row">
-        <label for="radiusAh">Радиус муравейника: {{ radiusAnthill }}px</label>
+        <label for="radiusAh">Радиус муравейника (гнезда): {{ radiusAnthill }}px</label>
         <input 
           id="radiusAh"
           type="range" 
